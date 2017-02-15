@@ -130,7 +130,7 @@ func (ss *SSMonitor) DelMonitorPort(port int) error {
 }
 
 func (ss *SSMonitor) ParsePortInfo() error {
-	out, err := ss.iptables.ListChainRules(iptablesApi.TableFilter, SS_OUT_RULES, []string{"-nvx"}...)
+	out, err := ss.iptables.ListChainRules(iptablesApi.TableFilter, SS_OUT_RULES, []string{"-nv"}...)
 	if err != nil {
 		return err
 	}
@@ -174,6 +174,9 @@ func parse(out []byte) (map[int]*RuleInfo, error) {
 			}
 			fmt.Println()
 			return nil, fmt.Errorf("split fields count error:%s", line)
+		}
+		if "tcp" != fields[4] {
+			continue
 		}
 		idx := strings.Index(fields[11], ":")
 		if idx < 0 {
