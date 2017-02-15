@@ -168,21 +168,24 @@ func parse(out []byte) (map[int]*RuleInfo, error) {
 	re := regexp.MustCompile("[\\s]+")
 	for _, line := range lines {
 		fields := re.Split(line, -1)
-		if len(fields) != 12 {
+		if strings.TrimSpace(fields[0]) == "" {
+			fields = fields[1:]
+		}
+		if len(fields) != 11 {
 			for i, e := range fields {
 				fmt.Printf("%d \t\t %s\n", i, e)
 			}
 			fmt.Println()
 			return nil, fmt.Errorf("split fields count error:%s", line)
 		}
-		if "tcp" != fields[4] {
+		if "tcp" != fields[3] {
 			continue
 		}
-		idx := strings.Index(fields[11], ":")
+		idx := strings.Index(fields[10], ":")
 		if idx < 0 {
-			return nil, fmt.Errorf("no find split token in :%s\n", fields[11])
+			return nil, fmt.Errorf("no find split token in :%s\n", fields[10])
 		}
-		portParts := []byte(fields[11])[idx+1:]
+		portParts := []byte(fields[10])[idx+1:]
 		port, err := strconv.Atoi(string(portParts))
 		if err != nil {
 			return nil, fmt.Errorf(err.Error())
@@ -190,15 +193,15 @@ func parse(out []byte) (map[int]*RuleInfo, error) {
 
 		rule := &RuleInfo{}
 
-		rule.pkts = fields[1]
-		rule.bytes = fields[2]
-		rule.opt = fields[3]
-		rule.proto = fields[4]
-		rule.target = fields[5]
-		rule.in = fields[6]
-		rule.out = fields[7]
-		rule.source = fields[8]
-		rule.destination = fields[9]
+		rule.pkts = fields[0]
+		rule.bytes = fields[1]
+		rule.opt = fields[2]
+		rule.proto = fields[3]
+		rule.target = fields[4]
+		rule.in = fields[5]
+		rule.out = fields[6]
+		rule.source = fields[7]
+		rule.destination = fields[8]
 		rule.port = port
 		result[port] = rule
 	}
