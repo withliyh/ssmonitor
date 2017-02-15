@@ -24,6 +24,19 @@ type SSMonitor struct {
 	iptables iptablesApi.Interface
 }
 
+type RuleInfo struct {
+	pkts        string
+	bytes       string
+	target      string
+	proto       string
+	opt         string
+	in          string
+	out         string
+	source      string
+	destination string
+	port        int
+}
+
 type SSUserInfo struct {
 	Port  int
 	Name  string
@@ -54,10 +67,10 @@ func (ss *SSMonitor) InitIptChains() error {
 	if _, err := ss.iptables.EnsureChain(iptablesApi.TableFilter, SS_OUT_RULES); err != nil {
 		return err
 	}
-	if _, err := ss.iptables.EnsureRule(iptablesApi.Append, iptablesApi.TableFilter, SS_IN_RULES, []string{"-j", string(SS_IN_RULES)}...); err != nil {
+	if _, err := ss.iptables.EnsureRule(iptablesApi.Append, iptablesApi.TableFilter, iptablesApi.ChainInput, []string{"-j", string(SS_IN_RULES)}...); err != nil {
 		return err
 	}
-	if _, err := ss.iptables.EnsureRule(iptablesApi.Append, iptablesApi.TableFilter, SS_OUT_RULES, []string{"-j", string(SS_OUT_RULES)}...); err != nil {
+	if _, err := ss.iptables.EnsureRule(iptablesApi.Append, iptablesApi.TableFilter, iptablesApi.ChainOutput, []string{"-j", string(SS_OUT_RULES)}...); err != nil {
 		return err
 	}
 	return nil
@@ -117,40 +130,22 @@ func (ss *SSMonitor) DelMonitorPort(port int) error {
 }
 
 func (ss *SSMonitor) ParsePortInfo() error {
-	out, err := ss.iptables.ListChainRules(iptablesApi.TableFilter, SS_OUT_RULES, []string{"-nv"}...)
+	out, err := ss.iptables.ListChainRules(iptablesApi.TableFilter, SS_OUT_RULES, []string{"-nvx"}...)
 	if err != nil {
 		return err
 	}
-	re1 := regexp.MustCompile("tcp spt:[\\d]+")
-	re2 := regexp.MustCompile("[\\s]+") //以空白字符分割字符串
 
-	parts := strings.Split(string(out), "destination")
-
-	if parts == nil || len(parts) != 2 {
-		return fmt.Errorf("port info bytes parse error.\n")
+	result, err := parse(out)
+	if err != nil {
+		return err
 	}
-	lines := re1.Split(parts[1], -1)
-	lines = lines[:len(lines)-1]
-	ports := re1.FindAllString(parts[1], -1)
-
-	if len(lines) != len(ports) {
-		return fmt.Errorf("port info line count not equ port line count.")
-	}
-
-	for i, line := range lines {
-		fieldSlice := re2.Split(line, -1)
-		portStr := strings.Split(ports[i], ":")[1]
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			return fmt.Errorf("can't conver %s to a number.", portStr)
+	for k, v := range ss.ports {
+		item, ok := result[k]
+		if ok {
+			v.Bytes = item.bytes
 		}
-
-		user := ss.ports[port]
-		if user != nil {
-			user.Bytes = fieldSlice[1]
-		}
-
 	}
+
 	return nil
 }
 func (ss *SSMonitor) ShowPortInfo(port int) (string, error) {
@@ -163,4 +158,46 @@ func (ss *SSMonitor) ShowPortInfo(port int) (string, error) {
 
 func (ss *SSMonitor) ShowAllPortInfo() map[int]*SSUserInfo {
 	return ss.ports
+}
+
+func parse(out []byte) (map[int]*RuleInfo, error) {
+	result := make(map[int]*RuleInfo)
+	parts := strings.Split(string(out), "destination")
+	lines := strings.Split(parts[1], "\n")
+	lines = lines[1 : len(lines)-1]
+	re := regexp.MustCompile("[\\s]+")
+	for _, line := range lines {
+		fields := re.Split(line, -1)
+		if len(fields) != 12 {
+			for i, e := range fields {
+				fmt.Printf("%d \t\t %s\n", i, e)
+			}
+			fmt.Println()
+			return nil, fmt.Errorf("split fields count error:%s", line)
+		}
+		idx := strings.Index(fields[11], ":")
+		if idx < 0 {
+			return nil, fmt.Errorf("no find split token in :%s\n", fields[11])
+		}
+		portParts := []byte(fields[11])[idx+1:]
+		port, err := strconv.Atoi(string(portParts))
+		if err != nil {
+			return nil, fmt.Errorf(err.Error())
+		}
+
+		rule := &RuleInfo{}
+
+		rule.pkts = fields[1]
+		rule.bytes = fields[2]
+		rule.opt = fields[3]
+		rule.proto = fields[4]
+		rule.target = fields[5]
+		rule.in = fields[6]
+		rule.out = fields[7]
+		rule.source = fields[8]
+		rule.destination = fields[9]
+		rule.port = port
+		result[port] = rule
+	}
+	return result, nil
 }

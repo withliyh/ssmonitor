@@ -55,7 +55,7 @@ func main() {
 
 	portInfos := monitor.ShowAllPortInfo()
 	for _, user := range portInfos {
-		fmt.Printf("User:%s\tPort:%d\tBytes:%s\n", user.Name, user.Port, user.Bytes)
+		fmt.Printf("Port:%d\tBytes:%s\t\tUser:%s\n", user.Port, user.Bytes, user.Name)
 	}
 
 }
