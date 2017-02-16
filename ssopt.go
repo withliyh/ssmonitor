@@ -38,13 +38,14 @@ type RuleInfo struct {
 }
 
 type SSUserInfo struct {
-	Port  int
-	Name  string
-	Bytes string
+	Port     int
+	Name     string
+	OutBytes string
+	InBytes  string
 }
 
 func (user *SSUserInfo) String() string {
-	return fmt.Sprint("%d \t %s \t %s\n", user.Port, user.Name, user.Bytes)
+	return fmt.Sprint("%d \t %s \t %s\n", user.Port, user.Name, user.OutBytes)
 }
 
 const (
@@ -100,9 +101,9 @@ func (ss *SSMonitor) DelIptChains() error {
 
 func (ss *SSMonitor) AddMonitorPort(port int, name string) error {
 	user := &SSUserInfo{
-		Port:  port,
-		Name:  name,
-		Bytes: "",
+		Port:     port,
+		Name:     name,
+		OutBytes: "",
 	}
 	ss.ports[port] = user
 	if _, err := ss.iptables.EnsureRule(iptablesApi.Append, iptablesApi.TableFilter, SS_IN_RULES,
@@ -130,22 +131,34 @@ func (ss *SSMonitor) DelMonitorPort(port int) error {
 }
 
 func (ss *SSMonitor) ParsePortInfo() error {
-	out, err := ss.iptables.ListChainRules(iptablesApi.TableFilter, SS_OUT_RULES, []string{"-nv"}...)
+	outbytes, err := ss.iptables.ListChainRules(iptablesApi.TableFilter, SS_OUT_RULES, []string{"-nv"}...)
 	if err != nil {
 		return err
 	}
-
-	result, err := parse(out)
+	result, err := parse(outbytes)
 	if err != nil {
 		return err
 	}
 	for k, v := range ss.ports {
 		item, ok := result[k]
 		if ok {
-			v.Bytes = item.bytes
+			v.OutBytes = item.bytes
 		}
 	}
-
+	inbytes, err := ss.iptables.ListChainRules(iptablesApi.TableFilter, SS_IN_RULES, []string{"-nv"}...)
+	if err != nil {
+		return err
+	}
+	result, err = parse(inbytes)
+	if err != nil {
+		return err
+	}
+	for k, v := range ss.ports {
+		item, ok := result[k]
+		if ok {
+			v.InBytes = item.bytes
+		}
+	}
 	return nil
 }
 func (ss *SSMonitor) ShowPortInfo(port int) (string, error) {
@@ -153,7 +166,7 @@ func (ss *SSMonitor) ShowPortInfo(port int) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("can't port info :%d", port)
 	}
-	return user.Bytes, nil
+	return user.OutBytes, nil
 }
 
 func (ss *SSMonitor) ShowAllPortInfo() map[int]*SSUserInfo {
